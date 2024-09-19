@@ -6,12 +6,17 @@ declare_id!("QYzUtCk2zAVMMjCwfBK6sVd979uDNeaxiAtfnjtRxpq");
 
 #[program]
 pub mod tic_tac_toe {
+    use anchor_lang::solana_program::program::invoke;
+    use anchor_lang::solana_program::system_instruction;
+
     use super::*;
 
-    pub fn setup_game(ctx: Context<SetupGame>, player_two: Pubkey) -> Result<()> {
-        ctx.accounts
-            .game
-            .start([ctx.accounts.player_one.key(), player_two])
+    pub fn setup_game(
+        ctx: Context<SetupGame>,
+        player_one: Pubkey,
+        player_two: Pubkey,
+    ) -> Result<()> {
+        ctx.accounts.game.start([player_one, player_two])
     }
     pub fn play(ctx: Context<Play>, tile: Tile) -> Result<()> {
         let game = &mut ctx.accounts.game;
@@ -23,6 +28,21 @@ pub mod tic_tac_toe {
         );
 
         game.play(&tile)
+    }
+    pub fn reward(ctx: Context<Transfer>) -> Result<()> {
+        let sender = &ctx.accounts.sender;
+        let recipient = &ctx.accounts.recipient;
+
+        let tx = system_instruction::transfer(&sender.key(), &recipient.key(), 1);
+        invoke(
+            &tx,
+            &[
+                sender.to_account_info(),
+                recipient.to_account_info(),
+                ctx.accounts.system_program.to_account_info().clone(),
+            ],
+        )?;
+        Ok(())
     }
 }
 
@@ -143,11 +163,11 @@ pub struct Tile {
 
 #[derive(Accounts)]
 pub struct SetupGame<'info> {
-    #[account(init, payer = player_one, space = 8 + Game::MAXIMUM_SIZE)]
+    #[account(init, payer = admin, space = 8 + Game::MAXIMUM_SIZE)]
     pub game: Account<'info, Game>,
 
     #[account(mut)]
-    pub player_one: Signer<'info>,
+    pub admin: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -157,4 +177,13 @@ pub struct Play<'info> {
     #[account(mut)]
     pub game: Account<'info, Game>,
     pub player: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Transfer<'info> {
+    #[account(mut)]
+    pub sender: Signer<'info>,
+    #[account(mut)]
+    pub recipient: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
 }
